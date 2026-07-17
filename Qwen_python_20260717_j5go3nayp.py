@@ -1,26 +1,51 @@
-# app.py
+# app.py (เวอร์ชันสำหรับ Streamlit Cloud)
 import streamlit as st
 import pandas as pd
+import numpy as np
 import joblib
+import os
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
 
-# ตั้งค่าหน้าเว็บ
 st.set_page_config(page_title="Steam Game Predictor", page_icon="🎮", layout="centered")
 
-# โหลดโมเดลและ Scaler ที่บันทึกไว้
+# ฟังก์ชันเทรนโมเดล (ใช้ cache เพื่อไม่ต้องเทรนใหม่ทุกครั้ง)
 @st.cache_resource
-def load_models():
-    model = joblib.load('svm_steam_model.pkl')
-    scaler = joblib.load('scaler.pkl')
+def train_model():
+    # โหลดข้อมูล
+    df = pd.read_csv('steam_games_dataset.csv')
+    
+    # Preprocessing
+    bool_cols = ['windows', 'mac', 'linux', 'is_free']
+    for col in bool_cols:
+        df[col] = df[col].map({True: 1, False: 0, 'True': 1, 'False': 0}).fillna(0).astype(int)
+    
+    features = ['windows', 'mac', 'linux', 'achievements', 'screenshots', 'movies']
+    X = df[features].fillna(0)
+    y = df['is_free']
+    
+    # Train-Test Split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    # Scaling
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    
+    # Train SVM
+    model = SVC(kernel='rbf', C=1.0, random_state=42)
+    model.fit(X_train_scaled, y_train)
+    
     return model, scaler
 
-model, scaler = load_models()
+# โหลดโมเดล
+model, scaler = train_model()
 
-# --- สร้าง UI บน Streamlit ---
+# --- UI ---
 st.title("🎮 Steam Game Predictor (SVM)")
-st.markdown("ระบบทำนายว่าเกมบน Steam จะเป็น **Free-to-Play** หรือ **เกมเสียเงิน** โดยใช้โมเดล Machine Learning (SVM)")
+st.markdown("ระบบทำนายว่าเกมบน Steam จะเป็น **Free-to-Play** หรือ **เกมเสียเงิน**")
 st.markdown("---")
 
-# สร้างฟอร์มให้ผู้ใช้กรอกข้อมูล
 st.subheader("กรอกข้อมูลของเกม")
 col1, col2 = st.columns(2)
 
@@ -34,9 +59,7 @@ with col2:
     screenshots = st.number_input("จำนวน Screenshots", min_value=0, value=0, step=1)
     movies = st.number_input("จำนวน Movies / Trailers", min_value=0, value=0, step=1)
 
-# ปุ่มกดทำนาย
 if st.button("🔮 ทำนายผล", type="primary", use_container_width=True):
-    # เตรียมข้อมูลในรูปแบบ DataFrame ให้ตรงกับตอนเทรน
     input_data = pd.DataFrame({
         'windows': [int(windows)],
         'mac': [int(mac)],
@@ -46,13 +69,9 @@ if st.button("🔮 ทำนายผล", type="primary", use_container_width=T
         'movies': [movies]
     })
     
-    # ปรับสเกลข้อมูลด้วย Scaler เดิมที่ใช้ตอนเทรน
     input_scaled = scaler.transform(input_data)
-    
-    # ทำนายผล
     prediction = model.predict(input_scaled)
     
-    # แสดงผลลัพธ์
     st.markdown("---")
     if prediction[0] == 1:
         st.success("🎉 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **Free-to-Play** สูง!")
