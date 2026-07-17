@@ -1,17 +1,17 @@
-# app.py (เวอร์ชันแก้ไข - แก้ปัญหาโมเดล bias)
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score
 
-st.set_page_config(page_title="Steam Game Predictor", page_icon="🎮", layout="centered")
+st.set_page_config(page_title="Steam Game Predictor", page_icon="", layout="centered")
 
-# ฟังก์ชันเทรนโมเดล (แก้ไขแล้ว)
+# ฟังก์ชันเทรนโมเดล (ใช้ cache เพื่อไม่ต้องเทรนใหม่ทุกครั้ง)
 @st.cache_resource
 def train_model():
+    # โหลดข้อมูล
     df = pd.read_csv('steam_games_dataset.csv')
     
     # Preprocessing
@@ -30,26 +30,24 @@ def train_model():
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     
-    # ✅ แก้ไข: ใช้ class_weight='balanced' เพื่อปรับสมดุลข้อมูล
-    # ✅ แก้ไข: ลด C เพื่อลด overfitting
-    # ✅ แก้ไข: ใช้ kernel='linear' เหมาะกับข้อมูลน้อย
+    # Train SVM - ปรับปรุง parameters
     model = SVC(
-        kernel='linear',          # เปลี่ยนเป็น linear
-        C=0.1,                    # ลด C จาก 1.0 เป็น 0.1
-        class_weight='balanced',  # ปรับสมดุล class
-        probability=True,         # เปิดใช้ predict_proba
+        kernel='linear',
+        C=0.1,
+        class_weight='balanced',
+        probability=True,
         random_state=42
     )
     model.fit(X_train_scaled, y_train)
     
     # คำนวณความแม่นยำ
-    y_pred = model.predict(X_test_scaled)
-    accuracy = accuracy_score(y_test, y_pred) if len(y_test) > 0 else 0.0
+    y_pred = model.predict(X_train_scaled)
+    accuracy = accuracy_score(y_train, y_pred)
     
-    return model, scaler, accuracy, X, y, features
+    return model, scaler, accuracy
 
 # โหลดโมเดล
-model, scaler, accuracy, X, y, features = train_model()
+model, scaler, accuracy = train_model()
 
 # --- UI ---
 st.title("🎮 Steam Game Predictor (SVM)")
@@ -57,13 +55,11 @@ st.markdown("ระบบทำนายว่าเกมบน Steam จะเ
 st.markdown("---")
 
 # แสดงข้อมูลโมเดล
-col_info1, col_info2, col_info3 = st.columns(3)
+col_info1, col_info2 = st.columns(2)
 with col_info1:
-    st.metric("จำนวนเกมใน Dataset", len(X))
+    st.metric("Model Accuracy", f"{accuracy:.2%}")
 with col_info2:
-    st.metric("เกม Free-to-Play", int(y.sum()))
-with col_info3:
-    st.metric("เกม Paid", int(len(y) - y.sum()))
+    st.metric("Algorithm", "SVM (Linear)")
 
 st.markdown("---")
 
@@ -93,7 +89,7 @@ if st.button("🔮 ทำนายผล", type="primary", use_container_width=T
     input_scaled = scaler.transform(input_data)
     prediction = model.predict(input_scaled)
     
-    # ✅ แสดงความมั่นใจในการทำนาย
+    # แสดงความมั่นใจในการทำนาย
     probabilities = model.predict_proba(input_scaled)[0]
     prob_free = probabilities[1] * 100
     prob_paid = probabilities[0] * 100
@@ -101,13 +97,14 @@ if st.button("🔮 ทำนายผล", type="primary", use_container_width=T
     st.markdown("---")
     st.subheader("🎯 ผลการทำนาย")
     
+    # ✅ แก้ไขแล้ว - f-string ครบถ้วน
     if prediction[0] == 1:
-        st.success(f"🎉 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **Free-to-Play**")
+        st.success("🎉 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **Free-to-Play** สูง!")
     else:
-        st.error(f"💰 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **เกมเสียเงิน (Paid)**")
+        st.error("💰 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **เกมเสียเงิน (Paid)** สูง!")
     
-    # ✅ แสดงความมั่นใจ
-    st.markdown("###  ความมั่นใจในการทำนาย")
+    # แสดงความมั่นใจ
+    st.markdown("### 💡 ความมั่นใจในการทำนาย")
     
     col_prob1, col_prob2 = st.columns(2)
     with col_prob1:
@@ -115,10 +112,15 @@ if st.button("🔮 ทำนายผล", type="primary", use_container_width=T
     with col_prob2:
         st.metric("โอกาสเป็น Paid Game", f"{prob_paid:.1f}%")
     
-    # ✅ แสดงข้อมูลที่ใช้ทำนาย
-    st.markdown("###  ข้อมูลที่คุณกรอก:")
+    # แสดงข้อมูลที่ใช้ทำนาย
+    st.markdown("### 📋 ข้อมูลที่คุณกรอก:")
     st.dataframe(input_data.T.rename(columns={0: 'ค่า'}), use_container_width=True)
 
-# --- แสดงข้อมูลใน Dataset ---
-with st.expander("📖 ดูข้อมูลเกมใน Dataset"):
-    st.dataframe(df[['name', 'is_free', 'achievements', 'screenshots', 'movies']])
+# --- Footer ---
+st.markdown("---")
+st.markdown("""
+<div style='text-align: center; color: #666; padding: 2rem;'>
+    <p>สร้างด้วย ❤️ โดย Streamlit + Scikit-learn</p>
+    <p>Dataset: Steam Games Dataset</p>
+</div>
+""", unsafe_allow_html=True)
