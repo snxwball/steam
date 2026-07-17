@@ -102,4 +102,23 @@ if st.button("🔮 ทำนายผล", type="primary", use_container_width=T
     st.subheader("🎯 ผลการทำนาย")
     
     if prediction[0] == 1:
-        st.success(f"🎉 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **Free-to-Play
+        st.success(f"🎉 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **Free-to-Play**")
+    else:
+        st.error(f"💰 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **เกมเสียเงิน (Paid)**")
+    
+    # ✅ แสดงความมั่นใจ
+    st.markdown("###  ความมั่นใจในการทำนาย")
+    
+    col_prob1, col_prob2 = st.columns(2)
+    with col_prob1:
+        st.metric("โอกาสเป็น Free-to-Play", f"{prob_free:.1f}%")
+    with col_prob2:
+        st.metric("โอกาสเป็น Paid Game", f"{prob_paid:.1f}%")
+    
+    # ✅ แสดงข้อมูลที่ใช้ทำนาย
+    st.markdown("###  ข้อมูลที่คุณกรอก:")
+    st.dataframe(input_data.T.rename(columns={0: 'ค่า'}), use_container_width=True)
+
+# --- แสดงข้อมูลใน Dataset ---
+with st.expander("📖 ดูข้อมูลเกมใน Dataset"):
+    st.dataframe(df[['name', 'is_free', 'achievements', 'screenshots', 'movies']])
