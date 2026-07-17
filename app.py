@@ -1,19 +1,17 @@
-# app.py (เวอร์ชันสำหรับ Streamlit Cloud)
+# app.py (เวอร์ชันแก้ไข - แก้ปัญหาโมเดล bias)
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
-import os
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, classification_report
 
 st.set_page_config(page_title="Steam Game Predictor", page_icon="🎮", layout="centered")
 
-# ฟังก์ชันเทรนโมเดล (ใช้ cache เพื่อไม่ต้องเทรนใหม่ทุกครั้ง)
+# ฟังก์ชันเทรนโมเดล (แก้ไขแล้ว)
 @st.cache_resource
 def train_model():
-    # โหลดข้อมูล
     df = pd.read_csv('steam_games_dataset.csv')
     
     # Preprocessing
@@ -32,18 +30,41 @@ def train_model():
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
     
-    # Train SVM
-    model = SVC(kernel='rbf', C=1.0, random_state=42)
+    # ✅ แก้ไข: ใช้ class_weight='balanced' เพื่อปรับสมดุลข้อมูล
+    # ✅ แก้ไข: ลด C เพื่อลด overfitting
+    # ✅ แก้ไข: ใช้ kernel='linear' เหมาะกับข้อมูลน้อย
+    model = SVC(
+        kernel='linear',          # เปลี่ยนเป็น linear
+        C=0.1,                    # ลด C จาก 1.0 เป็น 0.1
+        class_weight='balanced',  # ปรับสมดุล class
+        probability=True,         # เปิดใช้ predict_proba
+        random_state=42
+    )
     model.fit(X_train_scaled, y_train)
     
-    return model, scaler
+    # คำนวณความแม่นยำ
+    y_pred = model.predict(X_test_scaled)
+    accuracy = accuracy_score(y_test, y_pred) if len(y_test) > 0 else 0.0
+    
+    return model, scaler, accuracy, X, y, features
 
 # โหลดโมเดล
-model, scaler = train_model()
+model, scaler, accuracy, X, y, features = train_model()
 
 # --- UI ---
 st.title("🎮 Steam Game Predictor (SVM)")
 st.markdown("ระบบทำนายว่าเกมบน Steam จะเป็น **Free-to-Play** หรือ **เกมเสียเงิน**")
+st.markdown("---")
+
+# แสดงข้อมูลโมเดล
+col_info1, col_info2, col_info3 = st.columns(3)
+with col_info1:
+    st.metric("จำนวนเกมใน Dataset", len(X))
+with col_info2:
+    st.metric("เกม Free-to-Play", int(y.sum()))
+with col_info3:
+    st.metric("เกม Paid", int(len(y) - y.sum()))
+
 st.markdown("---")
 
 st.subheader("กรอกข้อมูลของเกม")
@@ -72,8 +93,13 @@ if st.button("🔮 ทำนายผล", type="primary", use_container_width=T
     input_scaled = scaler.transform(input_data)
     prediction = model.predict(input_scaled)
     
+    # ✅ แสดงความมั่นใจในการทำนาย
+    probabilities = model.predict_proba(input_scaled)[0]
+    prob_free = probabilities[1] * 100
+    prob_paid = probabilities[0] * 100
+    
     st.markdown("---")
+    st.subheader("🎯 ผลการทำนาย")
+    
     if prediction[0] == 1:
-        st.success("🎉 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **Free-to-Play** สูง!")
-    else:
-        st.error("💰 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **เกมเสียเงิน (Paid)** สูง!")
+        st.success(f"🎉 ผลลัพธ์: เกมนี้มีแนวโน้มเป็น **Free-to-Play
